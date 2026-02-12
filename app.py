@@ -117,6 +117,51 @@ class PointSelector:
             self.overlay.destroy()
 
 
+
+
+class RegionOutline:
+    def __init__(self, root: Tk):
+        self.root = root
+        self.overlay: Toplevel | None = None
+
+    def show(self, region: tuple[int, int, int, int]):
+        self.hide()
+
+        left, top, right, bottom = region
+        width = max(1, right - left)
+        height = max(1, bottom - top)
+
+        overlay = Toplevel(self.root)
+        overlay.attributes("-topmost", True)
+        overlay.overrideredirect(True)
+
+        transparent_key = "#00ff00"
+        overlay.configure(bg=transparent_key)
+        try:
+            overlay.wm_attributes("-transparentcolor", transparent_key)
+        except Exception:
+            pass
+
+        overlay.geometry(f"{width}x{height}+{left}+{top}")
+
+        from tkinter import Canvas
+
+        canvas = Canvas(
+            overlay,
+            bg=transparent_key,
+            highlightthickness=0,
+            bd=0,
+        )
+        canvas.pack(fill=BOTH, expand=True)
+        canvas.create_rectangle(1, 1, width - 2, height - 2, outline="red", width=3)
+
+        self.overlay = overlay
+
+    def hide(self):
+        if self.overlay and self.overlay.winfo_exists():
+            self.overlay.destroy()
+        self.overlay = None
+
 class WatchAndTellApp:
     def __init__(self, root: Tk):
         self.root = root
@@ -125,6 +170,7 @@ class WatchAndTellApp:
         self.root.resizable(False, False)
 
         self.state = AppState()
+        self.region_outline = RegionOutline(root)
         self.worker_thread: threading.Thread | None = None
         self.stop_event = threading.Event()
         self.status_queue: Queue[str] = Queue()
@@ -204,11 +250,13 @@ class WatchAndTellApp:
 
     def _set_region(self, region):
         self.state.region = region
+        self.region_outline.show(region)
         self.region_var.set(f"{region}")
-        self.status_var.set("감시 영역 설정됨")
+        self.status_var.set("감시 영역 설정됨 (빨간 테두리 유지)")
 
     def clear_region(self):
         self.state.region = None
+        self.region_outline.hide()
         self.region_var.set("미선택")
         self.status_var.set("감시 영역 선택 취소됨")
 
@@ -353,6 +401,7 @@ class WatchAndTellApp:
         time.sleep(0.2)
         if text:
             pyautogui.write(text, interval=0.01)
+        pyautogui.press("enter")
 
     def _worker_loop(self, interval: float):
         while not self.stop_event.is_set():
@@ -388,6 +437,7 @@ def main():
 
     def on_close():
         app.stop()
+        app.region_outline.hide()
         root.destroy()
 
     root.protocol("WM_DELETE_WINDOW", on_close)
